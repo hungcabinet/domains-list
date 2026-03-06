@@ -20,9 +20,7 @@ const appConfig = {
     perServiceTemplate: undefined,
     domainTemplate: "{{domain}} #{{service}}\n",
     fileExtension: "lst",
-    groups: [
-        "art", "education","games","messengers","music", "shop","socials","tools","torrent","video"
-    ],
+    groups: [],
     services: []
 }
 
