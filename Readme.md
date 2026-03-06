@@ -70,8 +70,6 @@ users.service2.com #service2
 service2.com #service2
 ```
 
-All generated files are stored in the `lists/` folder, and `lists/.generated_files` contains the list of all generated filenames.
-
 ---
 
 # Агрегатор списков доменов
@@ -145,5 +143,3 @@ api.service2.com #service2
 users.service2.com #service2
 service2.com #service2
 ```
-
-Все сгенерированные файлы лежат в папке `lists/`, а `lists/.generated_files` содержит список всех файлов.
