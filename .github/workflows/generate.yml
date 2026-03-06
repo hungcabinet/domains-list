@@ -1,0 +1,44 @@
+﻿name: Generate Domain Lists
+on:
+  schedule:
+    - cron: "10 0 * * *" # 00:10 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CONFIG_PATH: "/tmp/appConfig.json"
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Write config from secret
+        run: |
+          echo '${{ secrets.CONFIG_CONTENT }}' > $CONFIG_PATH
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run generator
+        run: node index.js
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add lists/*
+          git commit -m "Auto-update: iplists" || exit 0
+          git push
