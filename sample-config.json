@@ -12,6 +12,6 @@
     "jetbrains","intel","themoviedb","nvidia"
   ],
   "additionalLists":{
-    "antifilter":["https://antifilter.download/list/domains.lst"]
+    "example":["https://my.example.com/domaims.list"]
   }
 }
