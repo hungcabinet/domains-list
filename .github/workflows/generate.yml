@@ -39,6 +39,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add lists/*
-          git commit -m "Auto-update: iplists" || exit 0
+          git add -A lists
+          git diff --staged --quiet || git commit -m "Auto-update: domain lists"
           git push
