@@ -1,0 +1,17 @@
+﻿{
+  "maxFileEntries": 300,
+  "generateIndividualFiles": true,
+  "generateCombinedFiles": true,
+  "perServiceTemplate": "#{{service}}\n",
+  "domainTemplate": "{{domain}} #{{service}}\n",
+  "fileExtension":"lst",
+  "groups": [
+    "anime","art","education","games","music","news","shop","socials","tools","video"
+  ],
+  "services": [
+    "jetbrains","intel","themoviedb","nvidia"
+  ],
+  "additionalLists":{
+    "antifilter":["https://antifilter.download/list/domains.lst"]
+  }
+}s
