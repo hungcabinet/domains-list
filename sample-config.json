@@ -1,17 +1,34 @@
 ﻿{
-  "maxFileEntries": 300,
-  "generateIndividualFiles": true,
-  "generateCombinedFiles": true,
-  "perServiceTemplate": "#{{service}}\n",
-  "domainTemplate": "{{domain}} #{{service}}\n",
-  "fileExtension":"lst",
-  "groups": [
-    "anime","art","education","games","music","news","shop","socials","tools","video"
-  ],
-  "services": [
-    "jetbrains","intel","themoviedb","nvidia"
-  ],
-  "additionalLists":{
-    "example":["https://my.example.com/domaims.list"]
-  }
+  "sections": [
+    {
+      "name": "proxy-domains",
+      "outputDir": "lists/proxy",
+      "recordTypes": ["domain"],
+      "outputLayout": { "domain": "domains" },
+      "providers": ["opencck-main", "metacube", "v2fly"],
+      "groups": ["youtube", "games", "tools"],
+      "services": ["telegram", "discord", "github"],
+      "generateIndividualFiles": true,
+      "generateCombinedFiles": true,
+      "domainTemplate": "{{record}} #{{service}}\n"
+    },
+    {
+      "name": "proxy-cidr",
+      "outputDir": "lists/proxy",
+      "recordTypes": ["cidr4"],
+      "outputLayout": { "cidr4": "cidr4" },
+      "providers": ["opencck-main", "bgpAsn"],
+      "services": ["youtube.com", "telegram.org", "AS15169"],
+      "generateIndividualFiles": true
+    },
+    {
+      "name": "russia",
+      "outputDir": "lists/direct",
+      "recordTypes": ["domain", "cidr4"],
+      "outputLayout": { "domain": "domains", "cidr4": "cidr4" },
+      "providers": ["opencck-russia"],
+      "services": ["avito.ru", "2gis.ru", "alfabank.ru"],
+      "generateIndividualFiles": true
+    }
+  ]
 }

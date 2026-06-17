@@ -12,6 +12,6 @@
   "license": "ISC",
   "dependencies": {
     "dotenv": "^17.3.1",
-    "fast-xml-parser": "^5.4.2"
+    "fast-xml-parser": "^5.9.2"
   }
 }
