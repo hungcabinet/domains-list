@@ -21,7 +21,10 @@ async function processSection(section) {
         cidr4Template: section.cidr4Template,
         cidr6Template: section.cidr6Template,
         perServiceTemplate: section.perServiceTemplate,
-        outputLayout: section.outputLayout
+        outputLayout: section.outputLayout,
+        collapseCidrs: section.collapseCidrs,
+        collapseCidr4: section.collapseCidr4,
+        collapseCidr6: section.collapseCidr6
     });
 
     const providers = resolveProviders(section.providers);

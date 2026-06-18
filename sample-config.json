@@ -17,9 +17,10 @@
       "outputDir": "lists/proxy",
       "recordTypes": ["cidr4"],
       "outputLayout": { "cidr4": "cidr4" },
-      "providers": ["opencck-main", "bgpAsn"],
-      "services": ["youtube.com", "telegram.org", "AS15169"],
-      "generateIndividualFiles": true
+      "providers": ["opencck-main", "metacube", "bgpAsn"],
+      "services": ["youtube.com", "telegram.org", "facebook", "AS15169"],
+      "generateIndividualFiles": true,
+      "collapseCidrs": true
     },
     {
       "name": "russia",

@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { applyTemplate } from './templates.js';
+import { aggregateCidr4, aggregateCidr6, extractCidrFromLine } from '../utils/cidrAggregate.js';
+import { RecordType } from '../types.js';
 
 export class OutputManager {
     constructor(options = {}) {
@@ -16,6 +18,15 @@ export class OutputManager {
             perService: options.perServiceTemplate || ""
         };
         this.outputLayout = options.outputLayout || { domain: "." };
+
+        const collapseAll = options.collapseCidrs === true;
+        this.collapseCidr4 = collapseAll || options.collapseCidr4 === true;
+        this.collapseCidr6 = collapseAll || options.collapseCidr6 === true;
+
+        this.layoutTypeByDir = new Map();
+        for (const [type, dir] of Object.entries(this.outputLayout)) {
+            this.layoutTypeByDir.set((dir || '.').replace(/\\/g, '/'), type);
+        }
         
         this.generatedFiles = new Set();
         this.fileDataMap = new Map(); // key: {service}:{type}
@@ -64,6 +75,63 @@ export class OutputManager {
         return this.fileDataMap.get(key);
     }
 
+    _detectFileType(relativeName) {
+        const dir = path.dirname(relativeName).replace(/\\/g, '/');
+        return this.layoutTypeByDir.get(dir === '.' ? '.' : dir);
+    }
+
+    _shouldCollapse(type) {
+        if (type === RecordType.CIDR4) return this.collapseCidr4;
+        if (type === RecordType.CIDR6) return this.collapseCidr6;
+        return false;
+    }
+
+    _collapseCidrFiles(files) {
+        if (!this.collapseCidr4 && !this.collapseCidr6) return;
+
+        for (const relativeName of files) {
+            const type = this._detectFileType(relativeName);
+            if (!this._shouldCollapse(type)) continue;
+
+            const fullPath = path.join(this.outputDir, relativeName);
+            if (!fs.existsSync(fullPath)) continue;
+
+            const lines = fs.readFileSync(fullPath, 'utf-8').split('\n');
+            const cidrs = [];
+            let header = '';
+
+            for (const line of lines) {
+                const cidr = extractCidrFromLine(line);
+                if (cidr) {
+                    cidrs.push(cidr);
+                } else if (line.trim() && !header && this.templates.perService) {
+                    header = line.endsWith('\n') ? line : line + '\n';
+                }
+            }
+
+            if (cidrs.length === 0) continue;
+
+            const aggregated = type === RecordType.CIDR4
+                ? aggregateCidr4(cidrs)
+                : aggregateCidr6(cidrs);
+
+            const baseName = path.basename(relativeName, `.${this.fileExtension}`);
+            const partitionMatch = baseName.match(/^(.+)_(\d+)$/);
+            const service = partitionMatch ? partitionMatch[1] : baseName;
+            const template = this.templates[type] || "{{record}}\n";
+
+            let output = header;
+            for (const record of aggregated) {
+                output += applyTemplate(template, { record, service, type });
+            }
+            fs.writeFileSync(fullPath, output);
+
+            if (cidrs.length !== aggregated.length) {
+                console.log(`[output] Collapsed ${relativeName}: ${cidrs.length} → ${aggregated.length} prefixes`);
+            }
+        }
+    }
+
     pushRecord(service, record, type) {
         const fileData = this._getFileData(service, type);
         
@@ -108,6 +176,9 @@ export class OutputManager {
     finalize(allGeneratedFiles = null) {
         const filesToKeep = allGeneratedFiles || this.generatedFiles;
         const sortedFiles = Array.from(filesToKeep).sort();
+
+        this._collapseCidrFiles(sortedFiles);
+
         const generatedFilesPath = path.join(this.outputDir, '.generated_files');
         
         fs.writeFileSync(generatedFilesPath, sortedFiles.join('\n') + '\n');
