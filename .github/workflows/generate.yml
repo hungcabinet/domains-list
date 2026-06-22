@@ -57,6 +57,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add -A lists
+          git add -A data
           git diff --staged --quiet || git commit -m "Auto-update: domain lists"
           git push

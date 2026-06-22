@@ -116,7 +116,7 @@ When `useRawCache` is enabled, raw data is also kept after run (no re-download i
 | `dataProviders` | Data provider IDs (required) |
 | `groups` | opencck groups; expands `services` |
 | `services` | Service names or ASN identifiers |
-| `additionalLists` | External URLs; key becomes `_key` service |
+| `additionalLists` | Custom lists (URL, local file, inline); key becomes `_key` service |
 | `collapseCidrs` | Merge overlapping/adjacent CIDR on raw layer |
 
 ### Output provider (shared)
@@ -168,15 +168,43 @@ Decompile: `sing-box rule-set decompile -o out.json file.srs`
 
 ### additionalLists formats
 
+Each key becomes a service named `_key`. Sources can be combined in one entry.
+
+**URL only** (shorthand — array of URLs):
+
 ```json
 "additionalLists": {
-  "custom-list": ["https://example.com/domains.txt"],
+  "custom-list": ["https://example.com/domains.txt"]
+}
+```
+
+**Object** — `urls`, `files`, and/or `entries` (inline addresses, no download):
+
+```json
+"additionalLists": {
   "extra-cidr": {
     "type": "cidr4",
     "urls": ["https://example.com/prefixes.txt"]
+  },
+  "local-domains": {
+    "files": ["./custom/my-domains.lst"]
+  },
+  "inline-domains": {
+    "entries": ["example.com", "cdn.example.com"]
+  },
+  "mixed": {
+    "type": "domain",
+    "urls": ["https://example.com/domains.txt"],
+    "files": ["./custom/extra.lst"],
+    "entries": ["one-off.example.com"]
   }
 }
 ```
+
+- `files` — path relative to the config file, or absolute
+- `file` — single file (alias for one-element `files`)
+- `entries` / `items` / `addresses` — inline list of records
+- `type` — record type (`domain` by default): `domain`, `ipv4`, `ipv6`, `cidr4`, `cidr6`
 
 ---
 

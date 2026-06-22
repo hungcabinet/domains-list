@@ -77,7 +77,8 @@ export function loadConfig(configPath) {
         throw new Error(`Config file not found: ${configPath}`);
     }
 
-    const content = fs.readFileSync(path.resolve(configPath), 'utf-8').replace(/^\uFEFF/, '');
+    const resolvedPath = path.resolve(configPath);
+    const content = fs.readFileSync(resolvedPath, 'utf-8').replace(/^\uFEFF/, '');
     const rawConfig = JSON.parse(content);
 
     if (!Array.isArray(rawConfig.sections) || rawConfig.sections.length === 0) {
@@ -85,6 +86,7 @@ export function loadConfig(configPath) {
     }
 
     return {
+        configDir: path.dirname(resolvedPath),
         rawTempDir: rawConfig.rawTempDir || '.cache/raw',
         keepRaw: rawConfig.keepRaw === true,
         useRawCache: rawConfig.useRawCache === true,

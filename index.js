@@ -1,9 +1,7 @@
 ﻿import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
-import { fetchUrlStringWithRetry } from './urls.js';
-import { filterRecords } from './utils.js';
-import { RecordType } from './types.js';
+import { collectAdditionalLists } from './additionalLists.js';
 import { loadConfig } from './config/loadConfig.js';
 import { resolveProviders } from './providers/registry.js';
 import { RawDataStore } from './output/raw/RawDataStore.js';
@@ -11,7 +9,7 @@ import { RawSectionSnapshot } from './output/raw/RawSectionSnapshot.js';
 import { renderOutputProviders } from './output/providers/registry.js';
 import { finalizeOutputDir } from './output/cleanup.js';
 
-async function collectRawData(section, rawStore) {
+async function collectRawData(section, rawStore, configDir) {
     const providers = resolveProviders(section.dataProviders);
     for (const provider of providers) {
         await provider.init();
@@ -69,34 +67,11 @@ async function collectRawData(section, rawStore) {
     }
 
     if (section.additionalLists) {
-        for (const serviceKey in section.additionalLists) {
-            const list = section.additionalLists[serviceKey];
-            const urls = Array.isArray(list) ? list : list.urls || [];
-            const type = list.type || RecordType.DOMAIN;
-            const serviceName = `_${serviceKey}`;
-
-            for (const url of urls) {
-                try {
-                    const text = await fetchUrlStringWithRetry(url);
-                    let items = text
-                        .split('\n')
-                        .map((line) => line.trim())
-                        .filter((line) => line && !line.startsWith('#'));
-
-                    items = filterRecords(type, items);
-
-                    for (const item of items) {
-                        rawStore.append(serviceName, item, type);
-                    }
-                } catch (err) {
-                    console.error(`Failed to fetch additional list from ${url}: ${err.message}`);
-                }
-            }
-        }
+        await collectAdditionalLists(section.additionalLists, rawStore, { configDir });
     }
 }
 
-async function processSection(section, rawTempDir, sectionIndex, useRawCache) {
+async function processSection(section, rawTempDir, sectionIndex, useRawCache, configDir) {
     console.log(`Processing section: ${section.name}`);
 
     const sectionDir = path.join(rawTempDir, `${sectionIndex}-${section.name}`);
@@ -115,7 +90,7 @@ async function processSection(section, rawTempDir, sectionIndex, useRawCache) {
             collapseCidr6: collapseAll || section.collapseCidr6 === true
         });
 
-        await collectRawData(section, rawStore);
+        await collectRawData(section, rawStore, configDir);
         rawStore.finalize();
 
         snapshot = new RawSectionSnapshot(sectionDir, rawStore.serviceOrder, section.recordTypes);
@@ -157,7 +132,7 @@ async function run() {
     const dirGroups = new Map();
 
     for (const [sectionIndex, section] of config.sections.entries()) {
-        const results = await processSection(section, rawTempDir, sectionIndex, useRawCache);
+        const results = await processSection(section, rawTempDir, sectionIndex, useRawCache, config.configDir);
 
         for (const result of results) {
             if (!dirGroups.has(result.outputDir)) {
