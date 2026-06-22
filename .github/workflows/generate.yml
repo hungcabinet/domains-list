@@ -53,10 +53,23 @@ jobs:
         run: node index.js
 
       - name: Commit and push changes
+        env:
+          COMMIT_PATHS: ${{ secrets.GIT_COMMIT_PATHS }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add -A data
+          PATHS="${COMMIT_PATHS:-*}"
+          if [ "$PATHS" = "*" ] || [ "$PATHS" = "all" ]; then
+            git add -A
+          else
+            IFS=',' read -ra DIRS <<< "$PATHS"
+            for p in "${DIRS[@]}"; do
+              p="${p#"${p%%[![:space:]]*}"}"
+              p="${p%"${p##*[![:space:]]}"}"
+              [ -n "$p" ] && git add -A "$p"
+            done
+          fi
+
           git diff --staged --quiet || git commit -m "Auto-update: domain lists"
           git push

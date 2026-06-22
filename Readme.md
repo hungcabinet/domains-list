@@ -17,9 +17,11 @@ Data sources:
 
 1. Fork this repository.
 2. Adjust the workflow schedule in `.github/workflows/generate.yml` to match your preferred execution time.
-3. In the repository settings, create a secret named `CONFIG_CONTENT` and paste the application configuration there.
+3. In the repository settings, create secrets:
+   - `CONFIG_CONTENT` — application configuration (JSON)
+   - `GIT_COMMIT_PATHS` (optional) — what to stage after generation: `*` for all changes, or comma-separated paths (default: `*`)
 
-The workflow reads this configuration and generates list files automatically.  
+The workflow reads the configuration and generates list files automatically.  
 Generated files are stored under each output provider's `outputDir`; `.generated_files` in that directory lists all managed filenames.
 
 Local run:
@@ -212,13 +214,27 @@ Each key becomes a service named `_key`. Sources can be combined in one entry.
 
 *Создан сугубо в образовательных целях.*
 
-Проект агрегирует домены, IP-адреса и CIDR-префиксы из публичных источников и генерирует `.lst`, `.mrs` (mihomo), `.srs` (sing-box).
+Проект агрегирует домены, IP-адреса и CIDR-префиксы из нескольких публичных источников и генерирует структурированные файлы для фильтрации, allowlist, сетевой инвентаризации и анализа.
+
+Поддерживаемые форматы вывода: plain `.lst`, mihomo `.mrs`, sing-box `.srs`.
+
+Источники данных:
+
+- https://iplist.opencck.org (main, beta, russia)
+- https://github.com/MetaCubeX/meta-rules-dat/tree/sing/geo/geosite
+- https://github.com/v2fly/domain-list-community
+- https://stat.ripe.net (BGP announced prefixes by ASN)
 
 ## Настройка
 
 1. Сделайте форк репозитория.
-2. Измените расписание в `.github/workflows/generate.yml`.
-3. Создайте секрет `CONFIG_CONTENT` с конфигурацией приложения.
+2. Настройте расписание workflow в `.github/workflows/generate.yml` под удобное время запуска.
+3. Создайте секреты в настройках репозитория:
+   - `CONFIG_CONTENT` — конфигурация приложения (JSON)
+   - `GIT_COMMIT_PATHS` (необязательно) — что добавлять в commit после генерации: `*` — все изменения, или пути через запятую (по умолчанию: `*`)
+
+Workflow читает конфигурацию и автоматически генерирует файлы списков.  
+Сгенерированные файлы сохраняются в `outputDir` каждого output provider; `.generated_files` в этой директории перечисляет все управляемые имена файлов.
 
 Локальный запуск:
 
@@ -229,53 +245,177 @@ CONFIG_PATH=./sample-config.json node index.js
 
 ## Конфигурационные файлы
 
-Пример — `sample-config.json`. В JSON указывайте только параметры, **отличающиеся от defaults** (`config/loadConfig.js`).
+Минимальный пример — `sample-config.json`. В JSON указывайте только параметры, **отличающиеся от значений по умолчанию**; defaults находятся в `config/loadConfig.js`.
+
+Пример (минимальный):
+
+```json
+{
+  "sections": [
+    {
+      "name": "proxy-domains",
+      "recordTypes": ["domain"],
+      "dataProviders": ["opencck-main", "metacube", "v2fly"],
+      "groups": ["youtube", "games", "tools"],
+      "services": ["telegram", "discord", "github"],
+      "outputProviders": [
+        {
+          "id": "text",
+          "outputDir": "lists/proxy",
+          "outputLayout": { "domain": "domains" },
+          "generateCombinedFiles": true,
+          "domainTemplate": "{{record}} #{{service}}\n"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Параллельный вывод text + ruleset (несколько `outputProviders` в одной секции):
+
+```text
+data/raw/domains/proxy/discord.lst
+data/mihomo/domains/proxy/discord.mrs
+data/mihomo/domains/proxy/.source/discord.txt
+data/sing-box/domains/proxy/discord.srs
+```
+
+Если имена файлов могут пересекаться, в каждой секции используйте **разные** значения `outputDir`.
+
+### Data providers
+
+| ID | Описание |
+|----|----------|
+| `opencck-main` | iplist.opencck.org — groups, domains, IP, CIDR |
+| `opencck-beta` | beta.iplist.opencck.org |
+| `opencck-russia` | russia.iplist.opencck.org |
+| `metacube` | MetaCubeX geosite JSON (domains) |
+| `v2fly` | v2fly domain-list-community (domains) |
+| `bgpAsn` | RIPE Stat announced prefixes для сервисов `AS{number}` |
+
+Для BGP добавьте сервисы вида `"AS15169"` или `"AS13335"` и включите `cidr4` / `cidr6` в `recordTypes`.
 
 ### Output providers
 
 | ID | Описание |
 |----|----------|
-| `text` | Plain `.lst` |
-| `mihomo` | `.txt` → `.mrs` (`mihomo convert-ruleset`) |
-| `singbox` | `.json` → `.srs` (`sing-box rule-set compile`) |
+| `text` | Plain `.lst` с шаблонами и layout |
+| `mihomo` | `.txt` → `.mrs` через `mihomo convert-ruleset` |
+| `singbox` | `.json` → `.srs` через `sing-box rule-set compile` |
 
-### Параметры корня
+Все три поддерживают одинаковую группировку файлов: по сервису, по группе, `_all_in_one`, разбиение (`maxFileEntries`).
+
+## Параметры конфигурации
+
+### Корень
 
 | Параметр | Default | Описание |
 |----------|---------|----------|
-| `rawTempDir` | см. `loadConfig.js` | Raw-кэш между run |
-| `keepRaw` | `false` | Не удалять raw после run |
-| `useRawCache` | `false` | Переиспользовать raw секций; env `USE_RAW_CACHE=1` |
+| `sections` | — | Список секций генерации (обязательно) |
+| `rawTempDir` | см. `loadConfig.js` | Промежуточные raw-данные между запусками |
+| `keepRaw` | `false` | Не удалять raw-кэш после запуска |
+| `useRawCache` | `false` | Переиспользовать существующий raw по секциям; также через `USE_RAW_CACHE=1` |
 
-**`keepRaw` только на корне конфига.** Per-section `keepRaw` не поддерживается.
+`keepRaw` задаётся **только на корне**. Per-section `keepRaw` не поддерживается.
 
-При `useRawCache: true` raw также сохраняется после run.
+При включённом `useRawCache` raw-данные также сохраняются после запуска (без повторной загрузки, если есть `.raw_manifest`).
 
-### Output provider (`mihomo` / `singbox`)
+### Секция (сбор данных)
 
-Общие с `text`: `outputDir`, `outputLayout`, `generateIndividualFiles`, `generateGroupFiles`, `generateCombinedFiles`, `maxFileEntries`.
+| Параметр | Описание |
+|----------|----------|
+| `name` | Метка секции (логирование) |
+| `recordTypes` | `domain`, `ipv4`, `ipv6`, `cidr4`, `cidr6` |
+| `dataProviders` | ID data providers (обязательно) |
+| `groups` | группы opencck; расширяют `services` |
+| `services` | имена сервисов или идентификаторы ASN |
+| `additionalLists` | пользовательские списки (URL, локальный файл, inline); ключ становится сервисом `_key` |
+| `collapseCidrs` | объединение перекрывающихся/смежных CIDR на raw-слое |
 
-Дополнительно: `sourceLayout`, `keepSourceFiles` (промежуточные `.txt` / `.json` в `.source/`).
+### Output provider (общие)
 
-Декомпиляция: `.srs` → `sing-box rule-set decompile`; `.mrs` — только через сохранённый source.
+| Параметр | Default | Описание |
+|----------|---------|----------|
+| `outputDir` | `./lists` | Корневая директория вывода |
+| `outputLayout` | `{ "domain": "." }` | Подпапка для каждого типа записей |
+| `generateIndividualFiles` | `true` | Один файл на сервис |
+| `generateGroupFiles` | `false` | Один файл на группу opencck |
+| `generateCombinedFiles` | `false` | Объединённый `_all_in_one` |
+| `maxFileEntries` | `-1` | Макс. записей в файле; разбиение при `>0` |
 
-## Пример вывода
+### Output provider (`text`)
 
-```text
-jetbrains.com
-telegram.org
+| Параметр | Default | Описание |
+|----------|---------|----------|
+| `fileExtension` | `lst` | Расширение выходных файлов |
+| `domainTemplate` | `{{record}}\n` | Шаблон строки (`{{domain}}` — alias) |
+| `perServiceTemplate` | `""` | Заголовок перед блоком сервиса в combined/group файлах |
+
+### Output provider (`mihomo`)
+
+Требуется `mihomo` в PATH. Домены по умолчанию включают поддомены (`+.{{record}}`).
+
+| Параметр | Default | Описание |
+|----------|---------|----------|
+| `fileExtension` | `mrs` | Скомпилированный вывод |
+| `sourceExtension` | `txt` | Промежуточный source |
+| `sourceLayout` | как `outputLayout` | Подпапка для source-файлов |
+| `keepSourceFiles` | `false` | Сохранять `.txt` после компиляции |
+| `requireCompiler` | `true` | Ошибка, если `mihomo` недоступен |
+
+Декомпиляция `.mrs` обратно в текст **не поддерживается** — используйте `keepSourceFiles` или `data/.../.source/`.
+
+### Output provider (`singbox`)
+
+Требуется `sing-box` в PATH.
+
+| Параметр | Default | Описание |
+|----------|---------|----------|
+| `fileExtension` | `srs` | Скомпилированный вывод |
+| `sourceExtension` | `json` | Промежуточный source |
+| `keepSourceFiles` | `false` | Сохранять `.json` после компиляции |
+| `domainIncludeSubdomains` | `true` | `domain` + `domain_suffix` |
+| `rulesetVersion` | `3` | Версия формата source sing-box |
+
+Декомпиляция: `sing-box rule-set decompile -o out.json file.srs`
+
+### Форматы additionalLists
+
+Каждый ключ становится сервисом с именем `_key`. Источники можно комбинировать в одной записи.
+
+**Только URL** (сокращённая форма — массив URL):
+
+```json
+"additionalLists": {
+  "custom-list": ["https://example.com/domains.txt"]
+}
 ```
 
-CIDR (`cidr4/AS15169.lst`):
+**Объект** — `urls`, `files` и/или `entries` (inline-адреса, без загрузки):
 
-```text
-142.250.0.0/15
-172.217.0.0/16
+```json
+"additionalLists": {
+  "extra-cidr": {
+    "type": "cidr4",
+    "urls": ["https://example.com/prefixes.txt"]
+  },
+  "local-domains": {
+    "files": ["./custom/my-domains.lst"]
+  },
+  "inline-domains": {
+    "entries": ["example.com", "cdn.example.com"]
+  },
+  "mixed": {
+    "type": "domain",
+    "urls": ["https://example.com/domains.txt"],
+    "files": ["./custom/extra.lst"],
+    "entries": ["one-off.example.com"]
+  }
+}
 ```
 
-Mihomo source (`.source/discord.txt`):
-
-```text
-+.discord.com
-+.discord.gg
-```
+- `files` — путь относительно файла конфигурации или абсолютный
+- `file` — один файл (alias для `files` из одного элемента)
+- `entries` / `items` / `addresses` — inline-список записей
+- `type` — тип записи (`domain` по умолчанию): `domain`, `ipv4`, `ipv6`, `cidr4`, `cidr6`
