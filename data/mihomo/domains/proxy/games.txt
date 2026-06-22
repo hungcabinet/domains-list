@@ -1,6 +1,0 @@
-+.chess.com
-+.chesscomfiles.com
-+.itch.io
-+.itch.zone
-+.modrinth.com
-+.modrinth.gg
