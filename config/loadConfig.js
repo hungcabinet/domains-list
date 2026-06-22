@@ -20,6 +20,54 @@ const TEXT_OUTPUT_DEFAULTS = {
     perServiceFooterTemplate: ''
 };
 
+const MIHOMO_OUTPUT_DEFAULTS = {
+    id: 'mihomo',
+    outputDir: './lists',
+    outputLayout: { [RecordType.DOMAIN]: '.' },
+    sourceLayout: null,
+    maxFileEntries: -1,
+    generateIndividualFiles: true,
+    generateGroupFiles: false,
+    generateCombinedFiles: false,
+    fileExtension: 'mrs',
+    sourceExtension: 'txt',
+    keepSourceFiles: false,
+    domainIncludeSubdomains: true,
+    mihomoPath: 'mihomo',
+    requireCompiler: true,
+    domainTemplate: '+.{{record}}\n',
+    ipv4Template: '{{record}}/32\n',
+    ipv6Template: '{{record}}/128\n',
+    cidr4Template: '{{record}}\n',
+    cidr6Template: '{{record}}\n',
+    perServiceTemplate: '',
+    perServiceFooterTemplate: ''
+};
+
+const SINGBOX_OUTPUT_DEFAULTS = {
+    id: 'singbox',
+    outputDir: './lists',
+    outputLayout: { [RecordType.DOMAIN]: '.' },
+    sourceLayout: null,
+    maxFileEntries: -1,
+    generateIndividualFiles: true,
+    generateGroupFiles: false,
+    generateCombinedFiles: false,
+    fileExtension: 'srs',
+    sourceExtension: 'json',
+    keepSourceFiles: false,
+    domainIncludeSubdomains: true,
+    rulesetVersion: 3,
+    singboxPath: 'sing-box',
+    requireCompiler: true
+};
+
+const OUTPUT_DEFAULTS_BY_ID = {
+    text: TEXT_OUTPUT_DEFAULTS,
+    mihomo: MIHOMO_OUTPUT_DEFAULTS,
+    singbox: SINGBOX_OUTPUT_DEFAULTS
+};
+
 /**
  * @param {string} configPath
  * @returns {{ rawTempDir: string, keepRaw: boolean, sections: Object[] }}
@@ -67,7 +115,6 @@ function normalizeSection(section) {
         collapseCidrs: collapseAll,
         collapseCidr4: collapseAll || section.collapseCidr4 === true,
         collapseCidr6: collapseAll || section.collapseCidr6 === true,
-        keepRaw: section.keepRaw === true,
         outputProviders: section.outputProviders.map((provider, index) =>
             normalizeOutputProvider(provider, name, index)
         )
@@ -79,8 +126,10 @@ function normalizeOutputProvider(provider, sectionName, index) {
         throw new Error(`Section "${sectionName}" outputProviders[${index}] must define "id"`);
     }
 
+    const defaults = OUTPUT_DEFAULTS_BY_ID[provider.id] || TEXT_OUTPUT_DEFAULTS;
+
     return {
-        ...TEXT_OUTPUT_DEFAULTS,
+        ...defaults,
         ...provider
     };
 }

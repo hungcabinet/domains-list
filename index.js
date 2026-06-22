@@ -179,9 +179,6 @@ async function run() {
     }
 
     for (const [sectionIndex, section] of config.sections.entries()) {
-        if (section.keepRaw) {
-            continue;
-        }
         const sectionDir = path.join(rawTempDir, `${sectionIndex}-${section.name}`);
         if (fs.existsSync(sectionDir)) {
             fs.rmSync(sectionDir, { recursive: true, force: true });

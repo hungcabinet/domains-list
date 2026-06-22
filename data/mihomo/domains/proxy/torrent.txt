@@ -1,0 +1,15 @@
++.rutor.info
++.rutor.is
++.rutor.org
++.torrent.by
++.maintracker.org
++.rutracker.cc
++.rutracker.cr
++.rutracker.me
++.rutracker.net
++.rutracker.nl
++.rutracker.org
++.rutracker.ru
++.rutracker.wiki
++.rutrk.org
++.t-ru.org

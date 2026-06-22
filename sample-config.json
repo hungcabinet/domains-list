@@ -1,7 +1,4 @@
 ﻿{
-  "rawTempDir": ".cache/raw",
-  "keepRaw": false,
-  "useRawCache": true,
   "sections": [
     {
       "name": "proxy-domains",
@@ -14,7 +11,6 @@
           "id": "text",
           "outputDir": "lists/proxy",
           "outputLayout": { "domain": "domains" },
-          "generateIndividualFiles": true,
           "generateCombinedFiles": true,
           "domainTemplate": "{{record}} #{{service}}\n"
         }
@@ -30,8 +26,7 @@
         {
           "id": "text",
           "outputDir": "lists/proxy",
-          "outputLayout": { "cidr4": "cidr4" },
-          "generateIndividualFiles": true
+          "outputLayout": { "cidr4": "cidr4" }
         }
       ]
     },
@@ -44,8 +39,7 @@
         {
           "id": "text",
           "outputDir": "lists/direct",
-          "outputLayout": { "domain": "domains", "cidr4": "cidr4" },
-          "generateIndividualFiles": true
+          "outputLayout": { "domain": "domains", "cidr4": "cidr4" }
         }
       ]
     }

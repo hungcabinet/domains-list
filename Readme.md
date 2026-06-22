@@ -4,6 +4,8 @@
 
 This project aggregates domain names, IP addresses, and CIDR prefixes from several public sources and generates structured output files for filtering, allowlists, network inventory, and analysis.
 
+Supported output formats: plain `.lst`, mihomo `.mrs`, sing-box `.srs`.
+
 Data sources:
 
 - https://iplist.opencck.org (main, beta, russia)
@@ -23,19 +25,18 @@ Generated files are stored under each output provider's `outputDir`; `.generated
 Local run:
 
 ```bash
-echo 'CONFIG_PATH=./sample-config.json' > .env
 npm install
-node index.js
+CONFIG_PATH=./sample-config.json node index.js
 ```
 
-## Configuration
+## Configuration files
 
-See `sample-config.json` for a full example.
+See `sample-config.json` for a minimal example. Specify only **non-default** parameters in JSON; defaults live in `config/loadConfig.js`.
+
+Example (minimal):
 
 ```json
 {
-  "rawTempDir": ".cache/raw",
-  "keepRaw": false,
   "sections": [
     {
       "name": "proxy-domains",
@@ -48,7 +49,6 @@ See `sample-config.json` for a full example.
           "id": "text",
           "outputDir": "lists/proxy",
           "outputLayout": { "domain": "domains" },
-          "generateIndividualFiles": true,
           "generateCombinedFiles": true,
           "domainTemplate": "{{record}} #{{service}}\n"
         }
@@ -58,7 +58,16 @@ See `sample-config.json` for a full example.
 }
 ```
 
-Multiple sections should use **separate** `outputDir` values. Output files are named by service, group, or `_all_in_one`; if two sections share a directory, later sections overwrite earlier ones with the same filename (for example `_all_in_one.lst`, `telegram.lst`, or a shared group name).
+Parallel text + ruleset output (multiple `outputProviders` in one section):
+
+```text
+data/raw/domains/proxy/discord.lst
+data/mihomo/domains/proxy/discord.mrs
+data/mihomo/domains/proxy/.source/discord.txt
+data/sing-box/domains/proxy/discord.srs
+```
+
+Each section should use **separate** `outputDir` values when filenames may collide.
 
 ### Data providers
 
@@ -78,86 +87,95 @@ For BGP, add services like `"AS15169"` or `"AS13335"` and include `cidr4` / `cid
 | ID | Description |
 |----|-------------|
 | `text` | Plain `.lst` files with templates and layout |
+| `mihomo` | `.txt` → `.mrs` via `mihomo convert-ruleset` |
+| `singbox` | `.json` → `.srs` via `sing-box rule-set compile` |
 
-## Configuration Parameters
+All three support the same file grouping: per-service, per-group, `_all_in_one`, partitions (`maxFileEntries`).
+
+## Configuration parameters
 
 ### Root
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sections` | array | List of generation sections (required) |
-| `rawTempDir` | string | Intermediate raw data directory (default `.cache/raw`) |
-| `keepRaw` | boolean | Keep raw data after run for inspection (default `false`) |
-| `useRawCache` | boolean | Reuse existing raw cache per section; skip network when `.raw_manifest` is present (default `false`). Also via env `USE_RAW_CACHE=1` |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `sections` | — | List of generation sections (required) |
+| `rawTempDir` | see `loadConfig.js` | Intermediate raw data between runs |
+| `keepRaw` | `false` | Do not delete raw cache after run |
+| `useRawCache` | `false` | Reuse existing raw per section; also via `USE_RAW_CACHE=1` |
+
+`keepRaw` is **root-only**. There is no per-section `keepRaw`.
+
+When `useRawCache` is enabled, raw data is also kept after run (no re-download if `.raw_manifest` exists).
 
 ### Section (data collection)
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `name` | string | Section label (logging) |
-| `recordTypes` | array | `domain`, `ipv4`, `ipv6`, `cidr4`, `cidr6` |
-| `dataProviders` | array | Data provider IDs (required) |
-| `groups` | array | opencck groups; expands `services` |
-| `services` | array | Service names or ASN identifiers |
-| `additionalLists` | object | External URLs; key becomes `_key` service |
-| `collapseCidrs` | boolean | Merge overlapping/adjacent CIDR on raw layer |
-| `collapseCidr4` | boolean | Merge IPv4 CIDR only |
-| `collapseCidr6` | boolean | Merge IPv6 CIDR only |
+| Parameter | Description |
+|-----------|-------------|
+| `name` | Section label (logging) |
+| `recordTypes` | `domain`, `ipv4`, `ipv6`, `cidr4`, `cidr6` |
+| `dataProviders` | Data provider IDs (required) |
+| `groups` | opencck groups; expands `services` |
+| `services` | Service names or ASN identifiers |
+| `additionalLists` | External URLs; key becomes `_key` service |
+| `collapseCidrs` | Merge overlapping/adjacent CIDR on raw layer |
+
+### Output provider (shared)
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `outputDir` | `./lists` | Root output directory |
+| `outputLayout` | `{ "domain": "." }` | Subfolder per record type |
+| `generateIndividualFiles` | `true` | One file per service |
+| `generateGroupFiles` | `false` | One file per opencck group |
+| `generateCombinedFiles` | `false` | Combined `_all_in_one` |
+| `maxFileEntries` | `-1` | Max entries per file; partitions if `>0` |
 
 ### Output provider (`text`)
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | string | Output provider ID (`text`) |
-| `outputDir` | string | Root output directory |
-| `outputLayout` | object | Subfolder per record type, e.g. `{ "domain": "domains" }` |
-| `generateIndividualFiles` | boolean | One file per service |
-| `generateCombinedFiles` | boolean | Combined `_all_in_one.lst` |
-| `maxFileEntries` | integer | Max entries per file; `-1` = no limit |
-| `domainTemplate` | string | Template for domain lines (`{{record}}`, `{{service}}`) |
-| `cidr4Template` | string | Template for IPv4 CIDR lines |
-| `perServiceTemplate` | string | Header inserted before each service block |
-| `fileExtension` | string | Output file extension (default `lst`) |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `fileExtension` | `lst` | Output extension |
+| `domainTemplate` | `{{record}}\n` | Line template (`{{domain}}` = alias) |
+| `perServiceTemplate` | `""` | Header before each service block in combined/group files |
+
+### Output provider (`mihomo`)
+
+Requires `mihomo` in PATH. Domains include subdomains by default (`+.{{record}}`).
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `fileExtension` | `mrs` | Compiled output |
+| `sourceExtension` | `txt` | Intermediate source |
+| `sourceLayout` | same as `outputLayout` | Subfolder for source files |
+| `keepSourceFiles` | `false` | Keep `.txt` after compile |
+| `requireCompiler` | `true` | Fail if `mihomo` unavailable |
+
+Decompile `.mrs` back to text is **not supported** — use `keepSourceFiles` or `data/.../.source/`.
+
+### Output provider (`singbox`)
+
+Requires `sing-box` in PATH.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `fileExtension` | `srs` | Compiled output |
+| `sourceExtension` | `json` | Intermediate source |
+| `keepSourceFiles` | `false` | Keep `.json` after compile |
+| `domainIncludeSubdomains` | `true` | `domain` + `domain_suffix` |
+| `rulesetVersion` | `3` | sing-box source format version |
+
+Decompile: `sing-box rule-set decompile -o out.json file.srs`
 
 ### additionalLists formats
 
-Simple (domains):
-
 ```json
 "additionalLists": {
-  "custom-list": ["https://example.com/domains.txt"]
-}
-```
-
-With record type:
-
-```json
-"additionalLists": {
+  "custom-list": ["https://example.com/domains.txt"],
   "extra-cidr": {
     "type": "cidr4",
     "urls": ["https://example.com/prefixes.txt"]
   }
 }
-```
-
-## Example Output
-
-```text
-#service1
-api.service1.com #service1
-users.service1.com #service1
-service1.com #service1
-
-#service2
-api.service2.com #service2
-service2.com #service2
-```
-
-CIDR example (`cidr4/AS15169.lst`):
-
-```text
-142.250.0.0/15
-172.217.0.0/16
 ```
 
 ---
@@ -166,14 +184,7 @@ CIDR example (`cidr4/AS15169.lst`):
 
 *Создан сугубо в образовательных целях.*
 
-Проект агрегирует домены, IP-адреса и CIDR-префиксы из публичных источников и генерирует структурированные файлы для фильтрации, allowlist-ов, инвентаризации сетей и анализа.
-
-Источники данных:
-
-- https://iplist.opencck.org (main, beta, russia)
-- https://github.com/MetaCubeX/meta-rules-dat/tree/sing/geo/geosite
-- https://github.com/v2fly/domain-list-community
-- https://stat.ripe.net (BGP-префиксы по ASN)
+Проект агрегирует домены, IP-адреса и CIDR-префиксы из публичных источников и генерирует `.lst`, `.mrs` (mihomo), `.srs` (sing-box).
 
 ## Настройка
 
@@ -181,122 +192,62 @@ CIDR example (`cidr4/AS15169.lst`):
 2. Измените расписание в `.github/workflows/generate.yml`.
 3. Создайте секрет `CONFIG_CONTENT` с конфигурацией приложения.
 
-Workflow генерирует файлы по конфигурации.  
-Результаты лежат в `outputProviders[].outputDir`; `.generated_files` — индекс управляемых файлов.
-
 Локальный запуск:
 
 ```bash
-echo 'CONFIG_PATH=./sample-config.json' > .env
 npm install
-node index.js
+CONFIG_PATH=./sample-config.json node index.js
 ```
 
-## Конфигурация
+## Конфигурационные файлы
 
-Полный пример — `sample-config.json`.
-
-```json
-{
-  "rawTempDir": ".cache/raw",
-  "keepRaw": false,
-  "sections": [
-    {
-      "name": "proxy-domains",
-      "recordTypes": ["domain"],
-      "dataProviders": ["opencck-main", "metacube", "v2fly"],
-      "groups": ["youtube", "games", "tools"],
-      "services": ["telegram", "discord", "github"],
-      "outputProviders": [
-        {
-          "id": "text",
-          "outputDir": "lists/proxy",
-          "outputLayout": { "domain": "domains" },
-          "generateIndividualFiles": true,
-          "generateCombinedFiles": true,
-          "domainTemplate": "{{record}} #{{service}}\n"
-        }
-      ]
-    }
-  ]
-}
-```
-
-У каждой секции должен быть **свой** `outputDir`. Файлы именуются по сервису, группе или как `_all_in_one`; при общей папке более поздняя секция перезаписывает файлы предыдущей с тем же именем (например `_all_in_one.lst`, `telegram.lst` или общая группа вроде `tools`).
-
-### Data providers
-
-| ID | Описание |
-|----|----------|
-| `opencck-main` | iplist.opencck.org — группы, домены, IP, CIDR |
-| `opencck-beta` | beta.iplist.opencck.org |
-| `opencck-russia` | russia.iplist.opencck.org |
-| `metacube` | MetaCubeX geosite JSON (домены) |
-| `v2fly` | v2fly domain-list-community (домены) |
-| `bgpAsn` | RIPE Stat, префиксы для сервисов `AS{номер}` |
+Пример — `sample-config.json`. В JSON указывайте только параметры, **отличающиеся от defaults** (`config/loadConfig.js`).
 
 ### Output providers
 
 | ID | Описание |
 |----|----------|
-| `text` | Plain `.lst` с шаблонами и layout |
+| `text` | Plain `.lst` |
+| `mihomo` | `.txt` → `.mrs` (`mihomo convert-ruleset`) |
+| `singbox` | `.json` → `.srs` (`sing-box rule-set compile`) |
 
-## Параметры конфигурации
+### Параметры корня
 
-### Корень
+| Параметр | Default | Описание |
+|----------|---------|----------|
+| `rawTempDir` | см. `loadConfig.js` | Raw-кэш между run |
+| `keepRaw` | `false` | Не удалять raw после run |
+| `useRawCache` | `false` | Переиспользовать raw секций; env `USE_RAW_CACHE=1` |
 
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| `sections` | array | Список секций (обязательно) |
-| `rawTempDir` | string | Промежуточные raw-данные (по умолчанию `.cache/raw`) |
-| `keepRaw` | boolean | Не удалять raw после run (по умолчанию `false`) |
-| `useRawCache` | boolean | Использовать raw-кэш секции без скачивания, если есть `.raw_manifest` (по умолчанию `false`). Также env `USE_RAW_CACHE=1` |
+**`keepRaw` только на корне конфига.** Per-section `keepRaw` не поддерживается.
 
-### Секция (сбор данных)
+При `useRawCache: true` raw также сохраняется после run.
 
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| `name` | string | Имя секции (логи) |
-| `recordTypes` | array | `domain`, `ipv4`, `ipv6`, `cidr4`, `cidr6` |
-| `dataProviders` | array | ID провайдеров данных (обязательно) |
-| `groups` | array | Группы opencck; расширяют `services` |
-| `services` | array | Имена сервисов или ASN |
-| `additionalLists` | object | Внешние URL; ключ → сервис `_key` |
-| `collapseCidrs` | boolean | Склейка CIDR на raw-слое |
-| `collapseCidr4` | boolean | Только IPv4 CIDR |
-| `collapseCidr6` | boolean | Только IPv6 CIDR |
+### Output provider (`mihomo` / `singbox`)
 
-### Output provider (`text`)
+Общие с `text`: `outputDir`, `outputLayout`, `generateIndividualFiles`, `generateGroupFiles`, `generateCombinedFiles`, `maxFileEntries`.
 
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| `id` | string | ID провайдера вывода (`text`) |
-| `outputDir` | string | Корневая папка вывода |
-| `outputLayout` | object | Подпапка на тип записи |
-| `generateIndividualFiles` | boolean | Отдельный файл на сервис |
-| `generateCombinedFiles` | boolean | Общий `_all_in_one.lst` |
-| `maxFileEntries` | integer | Лимит записей на файл; `-1` = без лимита |
-| `domainTemplate` | string | Шаблон строки домена |
-| `cidr4Template` | string | Шаблон строки CIDR |
-| `perServiceTemplate` | string | Заголовок перед блоком сервиса |
-| `fileExtension` | string | Расширение файлов (по умолчанию `lst`) |
+Дополнительно: `sourceLayout`, `keepSourceFiles` (промежуточные `.txt` / `.json` в `.source/`).
 
-## Пример сгенерированных файлов
+Декомпиляция: `.srs` → `sing-box rule-set decompile`; `.mrs` — только через сохранённый source.
+
+## Пример вывода
 
 ```text
-#service1
-api.service1.com #service1
-users.service1.com #service1
-service1.com #service1
-
-#service2
-api.service2.com #service2
-service2.com #service2
+jetbrains.com
+telegram.org
 ```
 
-Пример CIDR (`cidr4/AS15169.lst`):
+CIDR (`cidr4/AS15169.lst`):
 
 ```text
 142.250.0.0/15
 172.217.0.0/16
+```
+
+Mihomo source (`.source/discord.txt`):
+
+```text
++.discord.com
++.discord.gg
 ```

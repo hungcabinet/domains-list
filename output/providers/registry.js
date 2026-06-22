@@ -1,7 +1,11 @@
 import textProvider from './text.js';
+import mihomoProvider from './mihomo.js';
+import singboxProvider from './singbox.js';
 
 const outputProviderFactories = {
-    text: () => textProvider
+    text: () => textProvider,
+    mihomo: () => mihomoProvider,
+    singbox: () => singboxProvider
 };
 
 /**
