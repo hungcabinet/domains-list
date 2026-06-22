@@ -1,90 +1,92 @@
 ﻿import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
-import {fetchUrlStringWithRetry} from "./urls.js";
-import {filterRecords} from "./utils.js";
-import {RecordType} from "./types.js";
-import {OutputManager} from "./output/OutputManager.js";
-import {loadConfig} from "./config/loadConfig.js";
-import {resolveProviders} from "./providers/registry.js";
+import { fetchUrlStringWithRetry } from './urls.js';
+import { filterRecords } from './utils.js';
+import { RecordType } from './types.js';
+import { loadConfig } from './config/loadConfig.js';
+import { resolveProviders } from './providers/registry.js';
+import { RawDataStore } from './output/raw/RawDataStore.js';
+import { RawSectionSnapshot } from './output/raw/RawSectionSnapshot.js';
+import { renderOutputProviders } from './output/providers/registry.js';
+import { finalizeOutputDir } from './output/cleanup.js';
 
-async function processSection(section) {
-    console.log(`Processing section: ${section.name}`);
-
-    const outputManager = new OutputManager({
-        outputDir: section.outputDir,
-        maxFileEntries: section.maxFileEntries,
-        fileExtension: section.fileExtension,
-        domainTemplate: section.domainTemplate,
-        ipv4Template: section.ipv4Template,
-        ipv6Template: section.ipv6Template,
-        cidr4Template: section.cidr4Template,
-        cidr6Template: section.cidr6Template,
-        perServiceTemplate: section.perServiceTemplate,
-        outputLayout: section.outputLayout,
-        collapseCidrs: section.collapseCidrs,
-        collapseCidr4: section.collapseCidr4,
-        collapseCidr6: section.collapseCidr6
-    });
-
-    const providers = resolveProviders(section.providers);
+async function collectRawData(section, rawStore) {
+    const providers = resolveProviders(section.dataProviders);
     for (const provider of providers) {
         await provider.init();
     }
 
-    let targetServices = [...section.services];
-    let targetGroups = [...section.groups];
+    const serviceGroups = new Map();
+    const targetServices = [...section.services];
+    const targetGroups = [...section.groups];
 
-    // Collect services from groups
     for (const group of targetGroups) {
         for (const provider of providers) {
             if (provider.getServicesForGroup) {
+                const before = targetServices.length;
                 await provider.getServicesForGroup(group, targetServices);
-            }
-        }
-    }
-
-    // Process each service
-    for (const service of targetServices) {
-        for (const provider of providers) {
-            const records = await provider.getRecordsForService(service, section.recordTypes);
-            
-            for (const type of section.recordTypes) {
-                const items = records[type] || [];
-                for (const item of items) {
-                    if (section.generateCombinedFiles) {
-                        outputManager.pushRecord("_all_in_one", item, type);
-                    }
-                    if (section.generateIndividualFiles) {
-                        outputManager.pushRecord(service, item, type);
+                for (let i = before; i < targetServices.length; i++) {
+                    const service = targetServices[i];
+                    if (!serviceGroups.has(service)) {
+                        serviceGroups.set(service, group);
                     }
                 }
             }
         }
     }
 
-    // Process additional lists
+    for (const service of targetServices) {
+        if (serviceGroups.has(service)) {
+            continue;
+        }
+        for (const provider of providers) {
+            if (provider.getGroupForService) {
+                const group = provider.getGroupForService(service);
+                if (group) {
+                    serviceGroups.set(service, group);
+                    break;
+                }
+            }
+        }
+    }
+
+    for (const service of targetServices) {
+        const group = serviceGroups.get(service);
+        if (group) {
+            rawStore.setServiceGroup(service, group);
+        }
+
+        for (const provider of providers) {
+            const records = await provider.getRecordsForService(service, section.recordTypes);
+
+            for (const type of section.recordTypes) {
+                for (const item of records[type] || []) {
+                    rawStore.append(service, item, type);
+                }
+            }
+        }
+    }
+
     if (section.additionalLists) {
         for (const serviceKey in section.additionalLists) {
-            let list = section.additionalLists[serviceKey];
-            const urls = Array.isArray(list) ? list : (list.urls || []);
-            const type = (list.type || RecordType.DOMAIN);
+            const list = section.additionalLists[serviceKey];
+            const urls = Array.isArray(list) ? list : list.urls || [];
+            const type = list.type || RecordType.DOMAIN;
+            const serviceName = `_${serviceKey}`;
 
-            for (let url of urls) {
+            for (const url of urls) {
                 try {
-                    let text = await fetchUrlStringWithRetry(url);
-                    let items = text.split("\n").map(line => line.trim()).filter(line => line && !line.startsWith('#'));
-                    
+                    const text = await fetchUrlStringWithRetry(url);
+                    let items = text
+                        .split('\n')
+                        .map((line) => line.trim())
+                        .filter((line) => line && !line.startsWith('#'));
+
                     items = filterRecords(type, items);
 
-                    for (let item of items) {
-                        const serviceName = `_${serviceKey}`;
-                        if (section.generateCombinedFiles) {
-                            outputManager.pushRecord("_all_in_one", item, type);
-                        }
-                        if (section.generateIndividualFiles) {
-                            outputManager.pushRecord(serviceName, item, type);
-                        }
+                    for (const item of items) {
+                        rawStore.append(serviceName, item, type);
                     }
                 } catch (err) {
                     console.error(`Failed to fetch additional list from ${url}: ${err.message}`);
@@ -92,43 +94,104 @@ async function processSection(section) {
             }
         }
     }
-
-    console.log(`Finished section: ${section.name}`);
-    return outputManager;
 }
 
-async function run(){
-    dotenv.config();
-    
-    const configPath = process.env["CONFIG_PATH"];
-    if (!configPath) throw new Error('CONFIG_PATH not defined');
+async function processSection(section, rawTempDir, sectionIndex, useRawCache) {
+    console.log(`Processing section: ${section.name}`);
 
-    const config = loadConfig(configPath);
+    const sectionDir = path.join(rawTempDir, `${sectionIndex}-${section.name}`);
 
-    const managers = [];
-    for (const section of config.sections) {
-        const manager = await processSection(section);
-        managers.push(manager);
+    let snapshot;
+    if (useRawCache && RawDataStore.isSectionCacheReady(sectionDir)) {
+        console.log(`[cache] Using raw cache for section: ${section.name}`);
+        const serviceOrder = RawDataStore.serviceOrderFromManifest(sectionDir);
+        snapshot = new RawSectionSnapshot(sectionDir, serviceOrder, section.recordTypes);
+    } else {
+        const collapseAll = section.collapseCidrs === true;
+
+        const rawStore = new RawDataStore({
+            sectionDir,
+            collapseCidr4: collapseAll || section.collapseCidr4 === true,
+            collapseCidr6: collapseAll || section.collapseCidr6 === true
+        });
+
+        await collectRawData(section, rawStore);
+        rawStore.finalize();
+
+        snapshot = new RawSectionSnapshot(sectionDir, rawStore.serviceOrder, section.recordTypes);
     }
 
-    // Group by outputDir and finalize
-    const dirGroups = new Map(); // outputDir -> Set of generated files
-    const dirManagers = new Map(); // outputDir -> first manager found for this dir
+    const outputResults = await renderOutputProviders(snapshot, section.outputProviders, {
+        sectionName: section.name,
+        recordTypes: section.recordTypes
+    });
 
-    for (const m of managers) {
-        if (!dirGroups.has(m.outputDir)) {
-            dirGroups.set(m.outputDir, new Set());
-            dirManagers.set(m.outputDir, m);
-        }
-        const fileSet = dirGroups.get(m.outputDir);
-        for (const file of m.generatedFiles) {
-            fileSet.add(file);
+    console.log(`Finished section: ${section.name}`);
+    return outputResults;
+}
+
+async function run() {
+    dotenv.config();
+
+    const configPath = process.env.CONFIG_PATH;
+    if (!configPath) {
+        throw new Error('CONFIG_PATH not defined');
+    }
+
+    const config = loadConfig(configPath);
+    const useRawCache =
+        config.useRawCache === true ||
+        process.env.USE_RAW_CACHE === '1' ||
+        process.env.USE_RAW_CACHE === 'true';
+    const rawTempDir = path.resolve(config.rawTempDir);
+
+    if (!useRawCache && fs.existsSync(rawTempDir)) {
+        fs.rmSync(rawTempDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(rawTempDir, { recursive: true });
+
+    if (useRawCache) {
+        console.log(`[cache] useRawCache enabled — existing raw data in ${rawTempDir} will be reused`);
+    }
+
+    const dirGroups = new Map();
+
+    for (const [sectionIndex, section] of config.sections.entries()) {
+        const results = await processSection(section, rawTempDir, sectionIndex, useRawCache);
+
+        for (const result of results) {
+            if (!dirGroups.has(result.outputDir)) {
+                dirGroups.set(result.outputDir, new Set());
+            }
+            for (const file of result.generatedFiles) {
+                dirGroups.get(result.outputDir).add(file);
+            }
         }
     }
 
     for (const [outputDir, allFiles] of dirGroups) {
-        const manager = dirManagers.get(outputDir);
-        manager.finalize(allFiles);
+        finalizeOutputDir(outputDir, allFiles);
+    }
+
+    if (config.keepRaw || useRawCache) {
+        console.log(`[raw] Kept intermediate data in ${rawTempDir}`);
+        return;
+    }
+
+    for (const [sectionIndex, section] of config.sections.entries()) {
+        if (section.keepRaw) {
+            continue;
+        }
+        const sectionDir = path.join(rawTempDir, `${sectionIndex}-${section.name}`);
+        if (fs.existsSync(sectionDir)) {
+            fs.rmSync(sectionDir, { recursive: true, force: true });
+        }
+    }
+
+    if (fs.existsSync(rawTempDir) && fs.readdirSync(rawTempDir).length === 0) {
+        fs.rmSync(rawTempDir, { recursive: true, force: true });
+    } else if (fs.existsSync(rawTempDir)) {
+        console.log(`[raw] Kept intermediate data in ${rawTempDir}`);
     }
 }
 

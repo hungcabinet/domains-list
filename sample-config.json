@@ -1,35 +1,53 @@
 ﻿{
+  "rawTempDir": ".cache/raw",
+  "keepRaw": false,
+  "useRawCache": true,
   "sections": [
     {
       "name": "proxy-domains",
-      "outputDir": "lists/proxy",
       "recordTypes": ["domain"],
-      "outputLayout": { "domain": "domains" },
-      "providers": ["opencck-main", "metacube", "v2fly"],
+      "dataProviders": ["opencck-main", "metacube", "v2fly"],
       "groups": ["youtube", "games", "tools"],
       "services": ["telegram", "discord", "github"],
-      "generateIndividualFiles": true,
-      "generateCombinedFiles": true,
-      "domainTemplate": "{{record}} #{{service}}\n"
+      "outputProviders": [
+        {
+          "id": "text",
+          "outputDir": "lists/proxy",
+          "outputLayout": { "domain": "domains" },
+          "generateIndividualFiles": true,
+          "generateCombinedFiles": true,
+          "domainTemplate": "{{record}} #{{service}}\n"
+        }
+      ]
     },
     {
       "name": "proxy-cidr",
-      "outputDir": "lists/proxy",
       "recordTypes": ["cidr4"],
-      "outputLayout": { "cidr4": "cidr4" },
-      "providers": ["opencck-main", "metacube", "bgpAsn"],
+      "dataProviders": ["opencck-main", "metacube", "bgpAsn"],
       "services": ["youtube.com", "telegram.org", "facebook", "AS15169"],
-      "generateIndividualFiles": true,
-      "collapseCidrs": true
+      "collapseCidrs": true,
+      "outputProviders": [
+        {
+          "id": "text",
+          "outputDir": "lists/proxy",
+          "outputLayout": { "cidr4": "cidr4" },
+          "generateIndividualFiles": true
+        }
+      ]
     },
     {
       "name": "russia",
-      "outputDir": "lists/direct",
       "recordTypes": ["domain", "cidr4"],
-      "outputLayout": { "domain": "domains", "cidr4": "cidr4" },
-      "providers": ["opencck-russia"],
+      "dataProviders": ["opencck-russia"],
       "services": ["avito.ru", "2gis.ru", "alfabank.ru"],
-      "generateIndividualFiles": true
+      "outputProviders": [
+        {
+          "id": "text",
+          "outputDir": "lists/direct",
+          "outputLayout": { "domain": "domains", "cidr4": "cidr4" },
+          "generateIndividualFiles": true
+        }
+      ]
     }
   ]
 }

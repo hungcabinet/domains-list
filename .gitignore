@@ -12,6 +12,8 @@ dist/
 .DS_Store
 
 /temp*
+.cache/
 
 AGENTS.md
 refactoring.md
+test-config.json

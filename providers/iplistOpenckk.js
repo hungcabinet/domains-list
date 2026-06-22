@@ -15,6 +15,7 @@ export function createOpenCkkProvider(options = {}) {
 
     const services2sites = new Map();
     const groups2services = new Map();
+    const services2group = new Map();
 
     const serviceMap = new Map();
     serviceMap.set("jetbrains-ai", "jetbrains@grazie");
@@ -58,6 +59,7 @@ export function createOpenCkkProvider(options = {}) {
                     }
 
                     let group = data[site];
+                    services2group.set(service, group);
                     let groupServices = getServicesByGroup(group);
                     if (!groupServices.includes(service)) {
                         groupServices.push(service);
@@ -68,6 +70,13 @@ export function createOpenCkkProvider(options = {}) {
             } catch (err) {
                 console.error(`[${logTag}] Init failed with error: ${err}`);
             }
+        },
+
+        getGroupForService(service) {
+            if (serviceMap.has(service)) {
+                return services2group.get(serviceMap.get(service)) ?? null;
+            }
+            return services2group.get(service) ?? null;
         },
 
         async getServicesForGroup(groupName, resultList = []) {
