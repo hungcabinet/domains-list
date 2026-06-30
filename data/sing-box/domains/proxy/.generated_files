@@ -1,4 +1,10 @@
+_androidNtpDomains.srs
+_hoyoverseDomains.srs
 _kinopub-custom.srs
+_osRepoDomains.srs
+_vpnCustomDomains.srs
+_xiaomiIot.srs
+_youtubeAdditionalDomains.srs
 adguard.srs
 discord.srs
 games.srs
