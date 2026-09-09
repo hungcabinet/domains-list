@@ -6,6 +6,7 @@ _vpnCustomDomains.srs
 _xiaomiIot.srs
 _youtubeAdditionalDomains.srs
 adguard.srs
+ai.srs
 discord.srs
 games.srs
 github.srs
